@@ -45,66 +45,53 @@ public class ChatClient{
 		final ChatClient client = new ChatClient();
 
 		EventQueue.invokeLater(new Runnable() {
-		public void run() {
-					client.frame = new ChatFrame(user, String.format("Server: %s    Port: %s    User: %s", serverHost, port, user ));
-					client.frame.setTitle("Chatting Client");
-					client.frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-					client.frame.setVisible(true);						
-				}
+            public void run() {
+                ChatFrame frame = new ChatFrame(user, serverHost, port);
+                frame.setTitle("Chatting Client");
+                frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+                frame.setVisible(true);						
+            }
 		});						
-			
-		// wait until the frame is ready.
-		try {
-			while(client.frame == null)Thread.sleep(500);
-		} catch(InterruptedException ex) {
-			Thread.currentThread().interrupt();
-		}
-		if(client.connectToServer(serverHost, port)) {
-			client.processIncomingMsg();
-		}
 	}
-
+    
 	/**
-	 * Connect to the specified server host on the specified port.
+	 * Start a thread to:
+	 * 1. connect to the specified server host on the specified port,
+	 * 2. and then keep processing incoming message from the server.
 	 * @param host the host name or IP of the server to be connected.
 	 * @param port the port number on which the server is listening.
+	 * @param frame the window where the message is going to be shown.
 	 */	 
-	private boolean connectToServer(String host, int port) {
-		serverSocket = new Socket();
-		try {
-			serverSocket.connect(new InetSocketAddress(host, port), 10000 );		
-			OutputStream output = serverSocket.getOutputStream();
-			frame.setOutput(output);
-			frame.greet();
-			frame.appendLine("Connect to " + host + " [" + port + "] successfully!");
-		}
-		catch (IOException e){
-			frame.appendLine(String.format("Failed to connect to %s [ %d ].", host, port));
-			frame.appendLine("Please verify the server host name and the port number and make sure the server is started.\nThen restart this program.");
-			return false;
-		}
-		return true;
-	}
-	
-	/**
-	 * Keeping processing incoming message from the server.
-	 */
-	private void processIncomingMsg() {
-		while(true) {
-			try {
-				Scanner incomingMsg = new Scanner(serverSocket.getInputStream());
-				while (incomingMsg.hasNextLine()){
-					frame.appendLine(incomingMsg.nextLine());
+	 public static void startChatting(final String host, final int port, final ChatFrame frame){
+        new Thread(){
+            public void run(){
+				Socket serverSocket = null;
+				try{
+					serverSocket = new Socket();
+					serverSocket.connect(new InetSocketAddress(host, port), 10000 );		
+					OutputStream output = serverSocket.getOutputStream();
+					Scanner incomingMsg = new Scanner(serverSocket.getInputStream());
+					frame.setOutput(output);
+					frame.hello();
+					while (incomingMsg.hasNextLine())
+						frame.appendLine(incomingMsg.nextLine());
 				}
-			}
-			catch(IOException e) {
-				frame.appendLine(e.toString());
-			}
-		}
-	}	
+				catch(IOException e){
+				}
+				finally{
+					try{
+						if(serverSocket != null){
+							frame.goodbye();
+							serverSocket.close();
+						}
+					}
+					catch(IOException e){
+					}
+				}
+            }
+        }.start();
+    }
 	
 	private static final String DEFAULT_SERVER = "localhost";
 	private static final String DEFAULT_USER = "anonymous_client";
-	private Socket serverSocket;
-	private ChatFrame frame;
 }

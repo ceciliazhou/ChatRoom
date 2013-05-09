@@ -16,17 +16,18 @@ public class ChatFrame extends JFrame {
 	/**
 	 * Construct a ServerFrame.
 	 */
-	public ChatFrame(String userName, String label) {		
+	public ChatFrame(String userName, String serverHost, int port) {		
 		this.userName = userName;
 		JPanel infoPanel = new JPanel();
-		infoPanel.add(new JLabel(label));
+		infoPanel.add(new JLabel(String.format("Server: %s    Port: %s    User: %s", serverHost, port, userName )));
 		add(infoPanel, BorderLayout.NORTH);
 		JPanel chatPanel = initChatPanel(userName);
 		add(chatPanel, BorderLayout.CENTER);
 		pack();	
+        ChatClient.startChatting(serverHost, port, this);
 	}	
 
-	JPanel initChatPanel(final String whoamI){
+	private JPanel initChatPanel(final String whoamI){
 		JPanel chatPanel = new JPanel();
 		chatPanel.setLayout(new BorderLayout());	
 		
@@ -36,7 +37,6 @@ public class ChatFrame extends JFrame {
 			public void actionPerformed(ActionEvent event){
 				String msg = String.format("%tT %s:\n    %s", new Date(), whoamI, msgToBeSent.getText());
 				sendMsg(msg);
-				//appendLine(msg);
 				msgToBeSent.setText("");
 			}
 		});
@@ -54,20 +54,22 @@ public class ChatFrame extends JFrame {
 		return chatPanel;
 	}
 	
-	void setOutput(OutputStream outStream) {
+	public void setOutput(OutputStream outStream) {
 		output = new PrintWriter(outStream, true);
 	}
 	
-	void appendLine(String msg) {
+	public void appendLine(String msg) {
 		history.append(msg+"\n");	
 	}	
 	
-	void greet() {
-		sendMsg(String.format("%tT %s:\n    Hello, this is %s", new Date(), userName, userName));
+	public void hello() {
+		sendMsg(String.format("%tT %s joins the room!", new Date(), userName));
 	}
 	
-	void sendMsg(String msg) {
-		if(output != null) { output.println(msg);}
+	private void sendMsg(String msg) {
+		if(output != null) { 
+			output.println(msg);
+		}
 	}
 	
 	private String userName;

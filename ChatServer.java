@@ -33,14 +33,10 @@ import java.util.concurrent.locks.*;
 public class ChatServer {
 	public static void main(String[] args) {
 		int port = (args.length > 0) ? Integer.parseInt(args[0]) : DEFAULT_PORT;
-		new ChatServer(port).startWorking();	
+		new ChatServer().startWorking(port);	
 	}
 	
-	public ChatServer(int port){
-		this.port = port;
-	}
-	
-	public void startWorking(){
+	public void startWorking(final int port){
 		new Thread(){ public void run(){ startConnectionAcceptor(port); }}.start();
         new Thread(){ public void run(){ startMessageDistributor(); }}.start();			
 	}
@@ -53,18 +49,23 @@ public class ChatServer {
 			Socket client = null;
 			try {
 				String msg = msgQueue.take();
-				connectionLock.lock();
-				for(int i = 0; i < connections.size(); i++) {
-					client = connections.get(i);
-					new PrintWriter(client.getOutputStream(), true).println(msg);
+				synchronized(this){
+					for(int i = 0; i < connections.size(); i++) {
+						client = connections.get(i);
+						try{
+							new PrintWriter(client.getOutputStream(), true).println(msg);
+						} 
+						catch (IOException e) {
+							client.close();
+							removeClient(client);
+						} 
+					}
 				}
-			} catch (IOException e) {
-				removeClient(client);
-			} catch (InterruptedException e){
-				// ignore InterruptedException
-			} finally {
-				connectionLock.unlock();
 			}
+			catch (IOException e) {
+			} 
+			catch (InterruptedException e){
+			} 
 		}
 	}
 	
@@ -73,12 +74,12 @@ public class ChatServer {
 	 * @param port the port on which to start the server socket.
 	 */
 	private void startConnectionAcceptor(int port) {
+		ServerSocket serverSocket = null;
 		try {
-			ServerSocket serverSocket = new ServerSocket(port);
+			serverSocket = new ServerSocket(port);
 			System.out.println("Start service on [" + port + "] successfully!");
 			
 			while(true) {
-			
 				Socket clientSocket = serverSocket.accept();
 				addClient(clientSocket);				
 				new MessageCollector(clientSocket).start();
@@ -87,6 +88,15 @@ public class ChatServer {
 		catch(IOException e) {
 				System.out.println("Failed to start service on port [ "+port+" ].\nPlease check whether port is available or choose another free port.");
 				System.out.println(e.toString());
+		}
+		finally{
+			if(serverSocket != null){
+				try{
+					serverSocket.close();
+				}
+				catch(IOException e) {
+				}
+			}
 		}
 	}
 	
@@ -107,24 +117,24 @@ public class ChatServer {
 		 * Run the thread to collect messages coming from the client socket.
 		 */
 		 public void run() {
-			while(true) {
-				try {
-					try {					
-						Scanner incomingMsg = new Scanner(clientSocket.getInputStream());
-						while (incomingMsg.hasNextLine()){
-							msgQueue.put(incomingMsg.nextLine());
-						}
-					} finally {
-						if(!clientSocket.isClosed())
-							clientSocket.close();
-					}	
-				} catch (IOException e) {
-					removeClient(clientSocket);
-					return;
-				} catch (InterruptedException e){
-					// ignore InterruptedException
+			try {					
+				Scanner incomingMsg = new Scanner(clientSocket.getInputStream());
+				while (incomingMsg.hasNextLine()){
+					msgQueue.put(incomingMsg.nextLine());
 				}
-			}
+			} 
+			catch (Exception e) {
+			} 
+			finally {
+				if(!clientSocket.isClosed()){
+					try {
+						clientSocket.close();
+					} 
+					catch(IOException e) {
+					}
+					removeClient(clientSocket);
+				}
+			}	
 		}	
 		
 		private Socket clientSocket;
@@ -134,31 +144,19 @@ public class ChatServer {
 	 * Remove a client socket from the connection set.
 	 * @param clientSocket the client socket to be removed.
 	 */
-	private void removeClient(Socket clientSocket){
-		if(clientSocket ==  null) return;
-		try {
-			connectionLock.lock();
-			connections.remove(clientSocket); 
-		} finally {
-			connectionLock.unlock();
-		}
+	private synchronized void removeClient(Socket clientSocket){
+		connections.remove(clientSocket); 
 	}
 
 	/** 
 	 * Add a client socket to the connection set.
 	 * @param clientSocket the client socket to be added.
 	 */	
-	private void addClient(Socket clientSocket){
-		try {
-			connectionLock.lock();
-			connections.add(clientSocket);
-		} finally {
-			connectionLock.unlock();
-		}
+	private synchronized void addClient(Socket clientSocket){
+		connections.add(clientSocket);
 	}
 	
 	public static final int DEFAULT_PORT = 8000;
-	private final int port;
 	private final ArrayList<Socket> connections = new ArrayList<Socket>();
 	private final BlockingQueue<String> msgQueue = new LinkedBlockingQueue<String>();
 	private final Lock connectionLock = new ReentrantLock();
