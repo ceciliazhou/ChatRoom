@@ -37,61 +37,77 @@ import java.util.*;
  * It will send the user's name together with the message to the server and allow messages to be sent and received from server asynchronously.
  */
 public class ChatClient{
-	
-	public static void main(String[] args) {
-		final String serverHost = (args.length > 0) ? args[0] : DEFAULT_SERVER;
-		final int port = (args.length > 1) ? Integer.parseInt(args[1]) : ChatServer.DEFAULT_PORT;	
-		final String user = (args.length > 2) ? args[2] : DEFAULT_USER;
-		final ChatClient client = new ChatClient();
 
-		EventQueue.invokeLater(new Runnable() {
-            public void run() {
-                ChatFrame frame = new ChatFrame(user, serverHost, port);
-                frame.setTitle("Chatting Client");
-                frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-                frame.setVisible(true);						
-            }
-		});						
-	}
+    public static final String DEFAULT_SERVER = "localhost";
+    public static final String DEFAULT_USER = "anonymous_client";
     
-	/**
-	 * Start a thread to:
-	 * 1. connect to the specified server host on the specified port,
-	 * 2. and then keep processing incoming message from the server.
-	 * @param host the host name or IP of the server to be connected.
-	 * @param port the port number on which the server is listening.
-	 * @param frame the window where the message is going to be shown.
-	 */	 
-	 public static void startChatting(final String host, final int port, final ChatFrame frame){
-        new Thread(){
-            public void run(){
-				Socket serverSocket = null;
-				try{
-					serverSocket = new Socket();
-					serverSocket.connect(new InetSocketAddress(host, port), 10000 );		
-					OutputStream output = serverSocket.getOutputStream();
-					Scanner incomingMsg = new Scanner(serverSocket.getInputStream());
-					frame.setOutput(output);
-					frame.hello();
-					while (incomingMsg.hasNextLine())
-						frame.appendLine(incomingMsg.nextLine());
-				}
-				catch(IOException e){
-				}
-				finally{
-					try{
-						if(serverSocket != null){
-							frame.goodbye();
-							serverSocket.close();
-						}
-					}
-					catch(IOException e){
-					}
-				}
+    private static ChatFrame frame;
+    private static String user;
+    private static Socket serverSocket;
+
+    public static void main(String[] args)  throws InterruptedException, IOException {
+        final String server = (args.length > 0) ? args[0] : DEFAULT_SERVER;
+        final int port = (args.length > 1) ? Integer.parseInt(args[1]) : ChatServer.DEFAULT_PORT;   
+        user = (args.length > 2) ? args[2] : DEFAULT_USER;
+        connect2Server(server, port);   
+
+        EventQueue.invokeLater(new Runnable() {
+            public void run() {
+                ChatClient.frame = new ChatFrame(user, server, port);
+                ChatClient.frame.setTitle("Chatting Client");
+                ChatClient.frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+                ChatClient.frame.setVisible(true);                     
             }
-        }.start();
+        });    
+
+        startChatting();            
     }
-	
-	private static final String DEFAULT_SERVER = "localhost";
-	private static final String DEFAULT_USER = "anonymous_client";
+    
+    /**
+     * Start a thread to:
+     * 1. connect to the specified server host on the specified port,
+     * 2. and then keep processing incoming message from the server.
+     * @param server the host name or IP of the server to be connected.
+     * @param port the port number on which the server is listening.
+     */  
+     public static void connect2Server(String server, int port) throws IOException{
+        serverSocket = new Socket();
+        serverSocket.connect(new InetSocketAddress(server, port), 10000 );        
+        PrintWriter output = new PrintWriter(serverSocket.getOutputStream(), true);
+        output.println(user);                        
+    }
+
+    private static void startChatting(){
+        try{
+            Scanner incomingMsg = new Scanner(serverSocket.getInputStream());
+            while (incomingMsg.hasNextLine()){
+                String msg = incomingMsg.nextLine();
+                if(ChatClient.frame != null)
+                    ChatClient.frame.showMessage(msg);
+            }
+        }
+        catch(IOException e){
+        }
+        finally{
+            try{
+                if(serverSocket != null)
+                    serverSocket.close();
+                    serverSocket  = null;
+            }
+            catch(IOException e){
+            }
+        }
+    }
+    
+    public static void sendMsg(String msg) {
+        if(serverSocket != null){
+            try{
+                PrintWriter output = new PrintWriter(serverSocket.getOutputStream(), true);
+                output.println(msg);     
+            }
+            catch(IOException e){
+                System.err.println("Failed to send message! Please be sure the server is still alive.");
+            }
+        }
+    }
 }
